@@ -75,10 +75,6 @@ type BpfFilterValueT struct {
 type BpfFlowId BpfFlowIdT
 
 type BpfFlowIdT struct {
-	EthProtocol       uint16
-	Direction         uint8
-	SrcMac            [6]uint8
-	DstMac            [6]uint8
 	SrcIp             [16]uint8
 	DstIp             [16]uint8
 	SrcPort           uint16
@@ -86,12 +82,20 @@ type BpfFlowIdT struct {
 	TransportProtocol uint8
 	IcmpType          uint8
 	IcmpCode          uint8
-	IfIndex           uint32
 }
 
 type BpfFlowMetrics BpfFlowMetricsT
 
 type BpfFlowMetricsT struct {
+	EthProtocol      uint16
+	ObservedIntf     [4]BpfPktObservationT
+	NbObservedIntf   uint8
+	ObservedSrcIps   [4][4]uint8
+	NbObservedSrcIps uint8
+	ObservedDstIps   [4][4]uint8
+	NbObservedDstIps uint8
+	SrcMac           [6]uint8
+	DstMac           [6]uint8
 	Packets          uint32
 	Bytes            uint64
 	StartMonoTimeTs  uint64
@@ -114,15 +118,24 @@ type BpfFlowRecordT struct {
 type BpfGlobalCountersKeyT uint32
 
 const (
-	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED_KEY           BpfGlobalCountersKeyT = 0
-	BpfGlobalCountersKeyTFILTER_REJECT_KEY                   BpfGlobalCountersKeyT = 1
-	BpfGlobalCountersKeyTFILTER_ACCEPT_KEY                   BpfGlobalCountersKeyT = 2
-	BpfGlobalCountersKeyTFILTER_NOMATCH_KEY                  BpfGlobalCountersKeyT = 3
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_KEY              BpfGlobalCountersKeyT = 4
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 5
-	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 6
-	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 7
-	BpfGlobalCountersKeyTMAX_DROPPED_FLOWS_KEY               BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTHASHMAP_FLOWS_DROPPED               BpfGlobalCountersKeyT = 0
+	BpfGlobalCountersKeyTHASHMAP_PACKETS_CANT_UPDATE         BpfGlobalCountersKeyT = 1
+	BpfGlobalCountersKeyTHASHMAP_PACKETS_CANT_DELETE         BpfGlobalCountersKeyT = 2
+	BpfGlobalCountersKeyTFILTER_REJECT                       BpfGlobalCountersKeyT = 3
+	BpfGlobalCountersKeyTFILTER_ACCEPT                       BpfGlobalCountersKeyT = 4
+	BpfGlobalCountersKeyTFILTER_NOMATCH                      BpfGlobalCountersKeyT = 5
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR                  BpfGlobalCountersKeyT = 6
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_GROUPID_MISMATCH BpfGlobalCountersKeyT = 7
+	BpfGlobalCountersKeyTNETWORK_EVENTS_ERR_UPDATE_MAP_FLOWS BpfGlobalCountersKeyT = 8
+	BpfGlobalCountersKeyTNETWORK_EVENTS_GOOD                 BpfGlobalCountersKeyT = 9
+	BpfGlobalCountersKeyTPKT_MAP_HIT                         BpfGlobalCountersKeyT = 10
+	BpfGlobalCountersKeyTPKT_MAP_MISS                        BpfGlobalCountersKeyT = 11
+	BpfGlobalCountersKeyTPKT_MAP_AVOID_POTENTIAL_COLLISION   BpfGlobalCountersKeyT = 12
+	BpfGlobalCountersKeyTPKT_MAP_POTENTIAL_DUPLICATION       BpfGlobalCountersKeyT = 13
+	BpfGlobalCountersKeyTMARK_0                              BpfGlobalCountersKeyT = 14
+	BpfGlobalCountersKeyTMARK_SEEN                           BpfGlobalCountersKeyT = 15
+	BpfGlobalCountersKeyTMARK_OTHER                          BpfGlobalCountersKeyT = 16
+	BpfGlobalCountersKeyTMAX_COUNTERS                        BpfGlobalCountersKeyT = 17
 )
 
 type BpfPktDropsT struct {
@@ -131,6 +144,17 @@ type BpfPktDropsT struct {
 	LatestFlags     uint16
 	LatestState     uint8
 	LatestDropCause uint32
+}
+
+type BpfPktId struct {
+	SkbRef uint64
+	Hash   uint32
+	Tstamp uint64
+}
+
+type BpfPktObservationT struct {
+	Direction uint8
+	IfIndex   uint32
 }
 
 type BpfTcpFlagsT uint32
@@ -214,6 +238,7 @@ type BpfMapSpecs struct {
 	FilterMap       *ebpf.MapSpec `ebpf:"filter_map"`
 	GlobalCounters  *ebpf.MapSpec `ebpf:"global_counters"`
 	PacketRecord    *ebpf.MapSpec `ebpf:"packet_record"`
+	PktFlowMap      *ebpf.MapSpec `ebpf:"pkt_flow_map"`
 }
 
 // BpfObjects contains all objects after they have been loaded into the kernel.
@@ -241,6 +266,7 @@ type BpfMaps struct {
 	FilterMap       *ebpf.Map `ebpf:"filter_map"`
 	GlobalCounters  *ebpf.Map `ebpf:"global_counters"`
 	PacketRecord    *ebpf.Map `ebpf:"packet_record"`
+	PktFlowMap      *ebpf.Map `ebpf:"pkt_flow_map"`
 }
 
 func (m *BpfMaps) Close() error {
@@ -251,6 +277,7 @@ func (m *BpfMaps) Close() error {
 		m.FilterMap,
 		m.GlobalCounters,
 		m.PacketRecord,
+		m.PktFlowMap,
 	)
 }
 
