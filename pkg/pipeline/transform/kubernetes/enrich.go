@@ -6,6 +6,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/cni"
 	inf "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
 	"github.com/sirupsen/logrus"
 )
@@ -26,11 +27,27 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 	if !ok {
 		return
 	}
+	ips := []string{ip}
+	var additionalIPs []string
 	potentialKeys := informers.BuildSecondaryNetworkKeys(outputEntry, rule)
-	kubeInfo, err := informers.GetInfo(potentialKeys, ip)
-	if err != nil {
-		logrus.WithError(err).Tracef("can't find kubernetes info for keys %v and IP %s", potentialKeys, ip)
+	if moreIPsAny, ok := outputEntry["Additional"+rule.IPField]; ok {
+		if additionalIPs, ok = moreIPsAny.([]string); ok {
+			ips = append(ips, additionalIPs...)
+		}
+	}
+	ipInfos := getMultipleIPsKubeInfo(potentialKeys, ips)
+	kubeInfo := ipInfos.main
+	if kubeInfo == nil {
+		logrus.Tracef("can't find kubernetes info for keys %v and IPs %v", potentialKeys, ips)
 		return
+	}
+	if ipInfos.mainIP != ip {
+		// Promote main IP
+		outputEntry[rule.IPField] = ipInfos.mainIP
+		if len(ipInfos.otherIPs) > 0 {
+			outputEntry["Additional"+rule.IPField] = ipInfos.otherIPs
+		}
+		// TODO: promote port as well
 	}
 	if rule.Assignee != "otel" {
 		// NETOBSERV-666: avoid putting empty namespaces or Loki aggregation queries will
@@ -43,6 +60,10 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 		outputEntry[rule.Output+"_OwnerName"] = kubeInfo.Owner.Name
 		outputEntry[rule.Output+"_OwnerType"] = kubeInfo.Owner.Type
 		outputEntry[rule.Output+"_NetworkName"] = kubeInfo.NetworkName
+		if ipInfos.serviceIP != "" {
+			outputEntry[rule.Output+"_ServiceIP"] = ipInfos.serviceIP
+			outputEntry[rule.Output+"_ServiceName"] = ipInfos.serviceName
+		}
 		if rule.LabelsPrefix != "" {
 			for labelKey, labelValue := range kubeInfo.Labels {
 				outputEntry[rule.LabelsPrefix+"_"+labelKey] = labelValue
@@ -69,6 +90,10 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 		case inf.TypePod:
 			outputEntry[rule.Output+"k8s.pod.name"] = kubeInfo.Name
 			outputEntry[rule.Output+"k8s.pod.uid"] = kubeInfo.UID
+			if ipInfos.serviceIP != "" {
+				outputEntry[rule.Output+"k8s.service.ip"] = ipInfos.serviceIP
+				outputEntry[rule.Output+"k8s.service.name"] = ipInfos.serviceName
+			}
 		case inf.TypeService:
 			outputEntry[rule.Output+"k8s.service.name"] = kubeInfo.Name
 			outputEntry[rule.Output+"k8s.service.uid"] = kubeInfo.UID
@@ -89,6 +114,82 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 			}
 		}
 		fillInK8sZone(outputEntry, rule, kubeInfo, "k8s.zone")
+	}
+}
+
+type MultiIPsInfo struct {
+	main        *inf.Info
+	mainIP      string
+	serviceName string
+	serviceIP   string
+	otherIPs    []string
+}
+
+func getMultipleIPsKubeInfo(potentialKeys []cni.SecondaryNetKey, ips []string) *MultiIPsInfo {
+	var podInfo, serviceInfo, otherInfo *inf.Info
+	var podIP, serviceIP, otherIP string
+	var otherIPs []string
+	for _, ip := range ips {
+		kubeInfo, _ := informers.GetInfo(potentialKeys, ip)
+		if kubeInfo != nil {
+			switch kubeInfo.Type {
+			case "Pod":
+				if podInfo == nil {
+					podInfo = kubeInfo
+					podIP = ip
+				} else {
+					otherIPs = append(otherIPs, ip)
+				}
+			case "Service":
+				if serviceInfo == nil {
+					serviceInfo = kubeInfo
+					serviceIP = ip
+				} else {
+					otherIPs = append(otherIPs, ip)
+				}
+			default:
+				if otherInfo == nil {
+					otherInfo = kubeInfo
+					otherIP = ip
+				} else {
+					otherIPs = append(otherIPs, ip)
+				}
+			}
+		} else {
+			otherIPs = append(otherIPs, ip)
+		}
+	}
+	if otherIP != "" && (podInfo != nil || serviceInfo != nil) {
+		// Do not loose track of otherIP
+		otherIPs = append(otherIPs, otherIP)
+	}
+	if podInfo != nil {
+		if serviceInfo != nil {
+			return &MultiIPsInfo{
+				main:        podInfo,
+				mainIP:      podIP,
+				serviceName: serviceInfo.Name,
+				serviceIP:   serviceIP,
+				otherIPs:    otherIPs,
+			}
+		}
+		return &MultiIPsInfo{
+			main:     podInfo,
+			mainIP:   podIP,
+			otherIPs: otherIPs,
+		}
+	}
+	if serviceInfo != nil {
+		return &MultiIPsInfo{
+			main:     serviceInfo,
+			mainIP:   serviceIP,
+			otherIPs: otherIPs,
+		}
+	}
+	return &MultiIPsInfo{
+		main:     otherInfo,
+		mainIP:   otherIP,
+		otherIPs: otherIPs,
 	}
 }
 
