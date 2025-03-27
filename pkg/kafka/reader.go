@@ -110,7 +110,7 @@ func NewReader(config *api.IngestKafka) (*kafkago.Reader, int, error) {
 
 	kafkaReader := kafkago.NewReader(readerConfig)
 	if kafkaReader == nil {
-		return nil, 0, errors.New("NewIngestKafka: failed to create kafka-go reader")
+		return nil, 0, errors.New("kafka.NewReader: failed to create kafka-go reader")
 	}
 
 	return kafkaReader, bml, nil

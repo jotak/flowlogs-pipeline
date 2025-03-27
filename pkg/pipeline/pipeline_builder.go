@@ -401,7 +401,7 @@ func getIngester(opMetrics *operational.Metrics, params config.StageParam) (inge
 	case api.StdinType:
 		ingester, err = ingest.NewIngestStdin(opMetrics, params)
 	case api.KafkaType:
-		ingester, err = ingest.NewIngestKafka(opMetrics, params)
+		ingester, err = ingest.NewIngestMQ(opMetrics, params)
 	case api.GRPCType:
 		ingester, err = ingest.NewGRPCProtobuf(opMetrics, params)
 	case api.FakeType:

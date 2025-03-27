@@ -51,6 +51,8 @@ require (
 	sigs.k8s.io/e2e-framework v0.6.0
 )
 
+require github.com/rabbitmq/amqp091-go v1.10.0
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
