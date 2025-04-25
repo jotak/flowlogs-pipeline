@@ -17,7 +17,7 @@ require (
 	github.com/minio/minio-go/v7 v7.0.90
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/netobserv/gopipes v0.3.0
-	github.com/netobserv/loki-client-go v0.0.0-20250422082320-897c5796f32d
+	github.com/netobserv/loki-client-go v0.0.0-20250425113517-526b43e51847
 	github.com/netobserv/netobserv-ebpf-agent v1.9.0-crc0
 	github.com/netsampler/goflow2 v1.3.7
 	github.com/pkg/errors v0.9.1
@@ -114,7 +114,7 @@ require (
 	github.com/pion/transport/v2 v2.2.10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/procfs v0.16.0 // indirect
-	github.com/prometheus/prometheus v1.8.2-0.20201028100903-3245b3267b24 // indirect
+	github.com/prometheus/prometheus v0.303.0 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/safchain/ethtool v0.5.10 // indirect

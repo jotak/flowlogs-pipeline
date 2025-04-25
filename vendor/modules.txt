@@ -295,7 +295,7 @@ github.com/mxk/go-flowrate/flowrate
 ## explicit; go 1.18
 github.com/netobserv/gopipes/pkg/node
 github.com/netobserv/gopipes/pkg/node/internal/connect
-# github.com/netobserv/loki-client-go v0.0.0-20250422082320-897c5796f32d
+# github.com/netobserv/loki-client-go v0.0.0-20220927092034-f37122a54500
 ## explicit; go 1.15
 github.com/netobserv/loki-client-go/loki
 github.com/netobserv/loki-client-go/pkg/backoff
