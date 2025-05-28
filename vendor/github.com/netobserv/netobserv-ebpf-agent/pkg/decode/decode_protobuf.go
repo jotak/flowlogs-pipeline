@@ -2,10 +2,12 @@ package decode
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"syscall"
 	"time"
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
+	"github.com/netobserv/netobserv-ebpf-agent/pkg/ebpf"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/model"
 	"github.com/netobserv/netobserv-ebpf-agent/pkg/pbflow"
 
@@ -108,6 +110,17 @@ func RecordToMap(fr *model.Record) config.GenericMap {
 			if fr.ID.TransportProtocol == syscall.IPPROTO_TCP {
 				out["Flags"] = fr.Metrics.Flags
 			}
+		}
+	}
+
+	if rand.IntN(3) == 0 {
+		if fr.Metrics.AdditionalMetrics == nil {
+			fr.Metrics.AdditionalMetrics = &ebpf.BpfAdditionalMetrics{}
+		}
+		if rand.IntN(3) == 0 {
+			fr.Metrics.AdditionalMetrics.IpsecEncryptedRet = rand.Int32N(256) - 128
+		} else {
+			fr.Metrics.AdditionalMetrics.IpsecEncrypted = true
 		}
 	}
 
