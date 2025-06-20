@@ -17,18 +17,26 @@
       {
         "matchManagers": ["gomod"],
         "matchDepTypes": ["indirect"],
-        "enabled": true
-      },
-      {
-        "matchPackageNames": ["**"],
-        "groupName": "Go modules",
         "matchUpdateTypes": [
           "minor",
           "patch"
-        ]
+        ],
+        "matchPackageNames": ["**"],
+        "groupName": "Go modules",
+        "enabled": true
       },
       {
+        "matchManagers": ["gomod"],
         "matchUpdateTypes": ["major"],
+        "enabled": false
+      }
+    ]
+  },
+  "dockerfile": {
+    "packageRules": [
+      {
+        "matchManagers": ["dockerfile"],
+        "matchPackageNames": "docker.io/library/golang",
         "enabled": false
       }
     ]
