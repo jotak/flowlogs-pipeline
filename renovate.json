@@ -17,19 +17,21 @@
       {
         "matchManagers": ["gomod"],
         "matchDepTypes": ["indirect"],
-        "enabled": true
-      },
-      {
-        "matchPackageNames": ["**"],
-        "groupName": "Go modules",
+        "enabled": true,
         "matchUpdateTypes": [
           "minor",
           "patch"
         ]
       },
       {
-        "matchUpdateTypes": ["major"],
-        "enabled": false
+        "matchPackageNames": ["**"],
+        "groupName": "Go modules"
+      },
+      {
+        "matchManagers": ["gomod"],
+        "matchDepTypes": ["indirect"],
+        "enabled": false,
+        "matchUpdateTypes": ["major"]
       }
     ]
   }
