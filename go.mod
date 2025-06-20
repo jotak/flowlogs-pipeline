@@ -19,7 +19,7 @@ require (
 	github.com/netobserv/gopipes v0.3.0
 	github.com/netobserv/loki-client-go v0.0.0-20250425113517-526b43e51847
 	github.com/netobserv/netobserv-ebpf-agent v1.9.0-crc0.0.20250610144135-d64c5d99f2da
-	github.com/netsampler/goflow2 v1.3.7
+	github.com/netsampler/goflow2/v2 v2.2.3
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.22.0
 	github.com/prometheus/client_model v0.6.2
@@ -44,7 +44,7 @@ require (
 	golang.org/x/net v0.41.0
 	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.32.3
 	k8s.io/apimachinery v0.32.3
 	k8s.io/client-go v0.32.3
