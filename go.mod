@@ -114,7 +114,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/philhofer/fwd v1.1.3-0.20240916144458-20a13a1f6b7c // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
-	github.com/pion/dtls/v2 v2.2.12 // indirect
+	github.com/pion/dtls/v3 v3.0.6 // indirect
 	github.com/pion/logging v0.2.3 // indirect
 	github.com/pion/transport/v2 v2.2.10 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
