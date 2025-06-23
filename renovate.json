@@ -16,12 +16,12 @@
     "packageRules": [
       {
         "matchManagers": ["gomod"],
-        "matchUpdateTypes": ["minor", "patch"],
         "groupName": "Go modules"
       },
       {
         "matchManagers": ["gomod"],
         "matchUpdateTypes": ["major"],
+        "matchDepTypes": ["require", "indirect"],
         "enabled": false
       }
     ]
