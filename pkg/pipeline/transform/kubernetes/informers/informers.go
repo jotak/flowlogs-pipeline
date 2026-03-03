@@ -42,10 +42,9 @@ import (
 )
 
 const (
-	kubeConfigEnvVariable = "KUBECONFIG"
-	syncTime              = 10 * time.Minute
-	IndexCustom           = "byCustomKey"
-	IndexIP               = "byIP"
+	syncTime    = 10 * time.Minute
+	IndexCustom = "byCustomKey"
+	IndexIP     = "byIP"
 )
 
 var (

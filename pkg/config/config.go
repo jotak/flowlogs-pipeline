@@ -106,6 +106,7 @@ type Ingest struct {
 	GRPC      *api.IngestGRPCProto `yaml:"grpc,omitempty" json:"grpc,omitempty"`
 	Synthetic *api.IngestSynthetic `yaml:"synthetic,omitempty" json:"synthetic,omitempty"`
 	Stdin     *api.IngestStdin     `yaml:"stdin,omitempty" json:"stdin,omitempty"`
+	KubeState *api.IngestKubeState `yaml:"kubeState,omitempty" json:"kubeState,omitempty"`
 }
 
 type File struct {

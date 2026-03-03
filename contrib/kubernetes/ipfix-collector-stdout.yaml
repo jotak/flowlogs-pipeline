@@ -7,7 +7,7 @@ metadata:
 spec:
   containers:
     - name: flp-ipfix-stdout
-      image: quay.io/netobserv/flowlogs-pipeline:3cf0304
+      image: quay.io/netobserv/flowlogs-pipeline:main
       imagePullPolicy: Always
       args:
       - "--config=/etc/flowlogs-pipeline/config.yaml"

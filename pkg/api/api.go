@@ -27,6 +27,7 @@ const (
 	GRPCType        = "grpc"
 	FakeType        = "fake"
 	KafkaType       = "kafka"
+	KubeStateType   = "kube_state"
 	S3Type          = "s3"
 	OtlpLogsType    = "otlplogs"
 	OtlpMetricsType = "otlpmetrics"

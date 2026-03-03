@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingest-kube-state-config
+data:
+  config.yaml: |
+    log-level: info
+    pipeline:
+      - name: ingest
+      - name: stdout
+        follows: ingest
+    parameters:
+      - name: ingest
+        ingest:
+          type: kube_state
+          kubeState:
+            kinds:
+            - group: apps
+              version: v1
+              resource: deployments
+              namespace: cert-manager
+              fields:
+              - name: name
+                jsonPath: "{.metadata.name}"
+                type: string
+            - group: apps
+              version: v1
+              resource: daemonsets
+              fields:
+              - name: name
+                jsonPath: "{.metadata.name}"
+                type: string
+      - name: stdout
+        write:
+          type: stdout
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ingest-kube-state-sa
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ingest-kube-state
+  labels:
+    app: ingest-kube-state
+spec:
+  containers:
+    - name: ingest-kube-state
+      image: quay.io/jotak/flowlogs-pipeline:main
+      imagePullPolicy: Always
+      args:
+      - "--config=/etc/flowlogs-pipeline/config.yaml"
+      volumeMounts:
+        - name: configuration
+          mountPath: "/etc/flowlogs-pipeline/"
+  volumes:
+    - name: configuration
+      configMap:
+        name: ingest-kube-state-config
+  serviceAccountName: ingest-kube-state-sa
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flp-informers
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - daemonsets
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: flp-informers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: flp-informers
+subjects:
+  - kind: ServiceAccount
+    name: ingest-kube-state-sa
+    namespace: default
