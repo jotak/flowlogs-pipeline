@@ -39,8 +39,8 @@ func resourceEntryToMeta(entry *ResourceEntry) *model.ResourceMetaData {
 	return meta
 }
 
-// resourceEntriesToMeta converts a slice of ResourceEntry to model.ResourceMetaData.
-func resourceEntriesToMeta(entries []*ResourceEntry) []*model.ResourceMetaData {
+// ResourceEntriesToMeta converts a slice of ResourceEntry to model.ResourceMetaData.
+func ResourceEntriesToMeta(entries []*ResourceEntry) []*model.ResourceMetaData {
 	if len(entries) == 0 {
 		return nil
 	}

@@ -15,7 +15,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/metrics"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
-	k8sinformers "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
+	k8sinformers "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource/informers"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/k8scache"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -262,7 +262,6 @@ func runInformers(ctx context.Context, healthServer *informers.HealthServer) {
 	if err := inf.InitFromConfig(opts.Kubeconfig, &infConfig, opMetrics); err != nil {
 		log.WithError(err).Fatal("failed to initialize informers")
 	}
-	defer inf.Stop()
 
 	log.Info("Kubernetes informers initialized and synced")
 

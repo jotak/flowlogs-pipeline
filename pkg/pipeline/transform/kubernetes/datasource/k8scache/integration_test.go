@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource"
-	inf "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
+	"github.com/netobserv/flowlogs-pipeline/pkg/api"
+	pb "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/k8scache"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -18,17 +18,13 @@ import (
 // TestIntegration_ServerReceivesAdd tests that the server
 // can receive an ADD update from a real gRPC client
 func TestIntegration_ServerReceivesAdd(t *testing.T) {
-	// Setup test datasource
-	_, informers := inf.SetupStubs(testIPInfo, nil, testNodes)
-	ds := &datasource.Datasource{Informers: informers}
-	ds.SetKubernetesStore(datasource.NewKubernetesStore())
-
 	// Create cache server
-	cacheServer := NewKubernetesCacheServer(ds)
+	cacheServer := NewKubernetesCacheDatasource()
+	cacheServer.StartGRPC(&api.K8sCacheServer{})
 
 	// Create gRPC server
 	grpcServer := grpc.NewServer()
-	RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
+	pb.RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
 
 	// Start server on random port
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -57,7 +53,7 @@ func TestIntegration_ServerReceivesAdd(t *testing.T) {
 	defer conn.Close()
 
 	// Create client
-	client := NewKubernetesCacheServiceClient(conn)
+	client := pb.NewKubernetesCacheServiceClient(conn)
 
 	// Open bidirectional stream
 	stream, err := client.StreamUpdates(ctx)
@@ -68,16 +64,16 @@ func TestIntegration_ServerReceivesAdd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, syncMsg)
 
-	req, ok := syncMsg.Message.(*SyncMessage_Request)
+	req, ok := syncMsg.Message.(*pb.SyncMessage_Request)
 	require.True(t, ok, "Expected SyncRequest from server")
 	assert.Equal(t, int64(0), req.Request.LastVersion)
 
 	// Client sends ADD update
-	addUpdate := &CacheUpdate{
+	addUpdate := &pb.CacheUpdate{
 		Version:    1,
 		IsSnapshot: false,
-		Operation:  OperationType_OPERATION_ADD,
-		Entries: []*ResourceEntry{
+		Operation:  pb.OperationType_OPERATION_ADD,
+		Entries: []*pb.ResourceEntry{
 			{
 				Kind:      "Pod",
 				Namespace: "default",
@@ -96,14 +92,14 @@ func TestIntegration_ServerReceivesAdd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, ackMsg)
 
-	ack, ok := ackMsg.Message.(*SyncMessage_Ack)
+	ack, ok := ackMsg.Message.(*pb.SyncMessage_Ack)
 	require.True(t, ok, "Expected SyncAck from server")
 	assert.True(t, ack.Ack.Success, "Server should ACK successfully")
 	assert.Equal(t, int64(1), ack.Ack.Version)
 
 	// Verify that the datasource was actually mutated (not just ACKed)
 	// Query by IP to verify the resource was persisted
-	result := ds.IndexLookup(nil, "10.0.0.100")
+	result := cacheServer.IndexLookup(nil, "10.0.0.100")
 	require.NotNil(t, result, "Resource should be found by IP")
 	assert.Equal(t, "Pod", result.Kind)
 	assert.Equal(t, "default", result.Namespace)
@@ -120,14 +116,11 @@ func TestIntegration_ServerReceivesAdd(t *testing.T) {
 
 // TestIntegration_MultipleUpdatesFlow tests a realistic update flow
 func TestIntegration_MultipleUpdatesFlow(t *testing.T) {
-	// Setup
-	_, informers := inf.SetupStubs(testIPInfo, nil, testNodes)
-	ds := &datasource.Datasource{Informers: informers}
-	ds.SetKubernetesStore(datasource.NewKubernetesStore())
-	cacheServer := NewKubernetesCacheServer(ds)
+	cacheServer := NewKubernetesCacheDatasource()
+	cacheServer.StartGRPC(&api.K8sCacheServer{})
 
 	grpcServer := grpc.NewServer()
-	RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
+	pb.RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -152,22 +145,22 @@ func TestIntegration_MultipleUpdatesFlow(t *testing.T) {
 	require.NoError(t, err)
 	defer conn.Close()
 
-	client := NewKubernetesCacheServiceClient(conn)
+	client := pb.NewKubernetesCacheServiceClient(conn)
 	stream, err := client.StreamUpdates(ctx)
 	require.NoError(t, err)
 
 	// Receive initial SyncRequest
 	syncMsg, err := stream.Recv()
 	require.NoError(t, err)
-	_, ok := syncMsg.Message.(*SyncMessage_Request)
+	_, ok := syncMsg.Message.(*pb.SyncMessage_Request)
 	require.True(t, ok)
 
 	// Send first ADD
-	err = stream.Send(&CacheUpdate{
+	err = stream.Send(&pb.CacheUpdate{
 		Version:    1,
 		IsSnapshot: false,
-		Operation:  OperationType_OPERATION_ADD,
-		Entries: []*ResourceEntry{
+		Operation:  pb.OperationType_OPERATION_ADD,
+		Entries: []*pb.ResourceEntry{
 			{Kind: "Pod", Name: "pod1", Namespace: "default", Uid: "uid-pod1", Ips: []string{"10.0.0.1"}},
 		},
 	})
@@ -176,61 +169,61 @@ func TestIntegration_MultipleUpdatesFlow(t *testing.T) {
 	// Receive ACK
 	ackMsg, err := stream.Recv()
 	require.NoError(t, err)
-	ack, ok := ackMsg.Message.(*SyncMessage_Ack)
+	ack, ok := ackMsg.Message.(*pb.SyncMessage_Ack)
 	require.True(t, ok)
 	assert.True(t, ack.Ack.Success)
 	assert.Equal(t, int64(1), ack.Ack.Version)
 
 	// Verify pod1 was added to store
-	result := ds.IndexLookup(nil, "10.0.0.1")
+	result := cacheServer.IndexLookup(nil, "10.0.0.1")
 	require.NotNil(t, result, "pod1 should be found by IP after ADD")
 	assert.Equal(t, "pod1", result.Name)
 
 	// Send second ADD
-	err = stream.Send(&CacheUpdate{
+	err = stream.Send(&pb.CacheUpdate{
 		Version:    2,
 		IsSnapshot: false,
-		Operation:  OperationType_OPERATION_ADD,
-		Entries:    []*ResourceEntry{{Kind: "Pod", Name: "pod2", Namespace: "default", Uid: "uid-pod2", Ips: []string{"10.0.0.2"}}},
+		Operation:  pb.OperationType_OPERATION_ADD,
+		Entries:    []*pb.ResourceEntry{{Kind: "Pod", Name: "pod2", Namespace: "default", Uid: "uid-pod2", Ips: []string{"10.0.0.2"}}},
 	})
 	require.NoError(t, err)
 
 	// Receive ACK
 	ackMsg, err = stream.Recv()
 	require.NoError(t, err)
-	ack, ok = ackMsg.Message.(*SyncMessage_Ack)
+	ack, ok = ackMsg.Message.(*pb.SyncMessage_Ack)
 	require.True(t, ok)
 	assert.True(t, ack.Ack.Success)
 	assert.Equal(t, int64(2), ack.Ack.Version)
 
 	// Verify pod2 was added to store
-	result = ds.IndexLookup(nil, "10.0.0.2")
+	result = cacheServer.IndexLookup(nil, "10.0.0.2")
 	require.NotNil(t, result, "pod2 should be found by IP after ADD")
 	assert.Equal(t, "pod2", result.Name)
 
 	// Send DELETE
-	err = stream.Send(&CacheUpdate{
+	err = stream.Send(&pb.CacheUpdate{
 		Version:    3,
 		IsSnapshot: false,
-		Operation:  OperationType_OPERATION_DELETE,
-		Entries:    []*ResourceEntry{{Kind: "Pod", Name: "pod1", Namespace: "default", Uid: "uid-pod1"}},
+		Operation:  pb.OperationType_OPERATION_DELETE,
+		Entries:    []*pb.ResourceEntry{{Kind: "Pod", Name: "pod1", Namespace: "default", Uid: "uid-pod1"}},
 	})
 	require.NoError(t, err)
 
 	// Receive ACK
 	ackMsg, err = stream.Recv()
 	require.NoError(t, err)
-	ack, ok = ackMsg.Message.(*SyncMessage_Ack)
+	ack, ok = ackMsg.Message.(*pb.SyncMessage_Ack)
 	require.True(t, ok)
 	assert.True(t, ack.Ack.Success)
 	assert.Equal(t, int64(3), ack.Ack.Version)
 
 	// Verify pod1 was deleted from store
-	result = ds.IndexLookup(nil, "10.0.0.1")
+	result = cacheServer.IndexLookup(nil, "10.0.0.1")
 	assert.Nil(t, result, "pod1 should be removed after DELETE")
 
 	// Verify pod2 is still present
-	result = ds.IndexLookup(nil, "10.0.0.2")
+	result = cacheServer.IndexLookup(nil, "10.0.0.2")
 	require.NotNil(t, result, "pod2 should still be present after deleting pod1")
 	assert.Equal(t, "pod2", result.Name)
 
@@ -246,13 +239,11 @@ func TestIntegration_MultipleUpdatesFlow(t *testing.T) {
 // TestIntegration_MultipleClientsConnect tests that multiple informer clients
 // can connect to the same server
 func TestIntegration_MultipleClientsConnect(t *testing.T) {
-	// Setup
-	_, informers := inf.SetupStubs(testIPInfo, nil, testNodes)
-	ds := &datasource.Datasource{Informers: informers}
-	cacheServer := NewKubernetesCacheServer(ds)
+	cacheServer := NewKubernetesCacheDatasource()
+	cacheServer.StartGRPC(&api.K8sCacheServer{})
 
 	grpcServer := grpc.NewServer()
-	RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
+	pb.RegisterKubernetesCacheServiceServer(grpcServer, cacheServer)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -286,7 +277,7 @@ func TestIntegration_MultipleClientsConnect(t *testing.T) {
 			}
 			defer conn.Close()
 
-			client := NewKubernetesCacheServiceClient(conn)
+			client := pb.NewKubernetesCacheServiceClient(conn)
 			stream, err := client.StreamUpdates(ctx)
 			if err != nil {
 				errors <- fmt.Errorf("client %d failed to open stream: %w", clientID, err)
@@ -299,7 +290,7 @@ func TestIntegration_MultipleClientsConnect(t *testing.T) {
 				errors <- fmt.Errorf("client %d failed to receive SyncRequest: %w", clientID, err)
 				return
 			}
-			req, ok := syncMsg.Message.(*SyncMessage_Request)
+			req, ok := syncMsg.Message.(*pb.SyncMessage_Request)
 			if !ok {
 				errors <- fmt.Errorf("client %d expected SyncRequest but got %T", clientID, syncMsg.Message)
 				return
@@ -311,11 +302,11 @@ func TestIntegration_MultipleClientsConnect(t *testing.T) {
 
 			// Send ADD update
 			expectedVersion := int64(clientID + 1)
-			err = stream.Send(&CacheUpdate{
+			err = stream.Send(&pb.CacheUpdate{
 				Version:    expectedVersion,
 				IsSnapshot: false,
-				Operation:  OperationType_OPERATION_ADD,
-				Entries:    []*ResourceEntry{{Kind: "Pod", Name: fmt.Sprintf("pod-%d", clientID), Namespace: "default"}},
+				Operation:  pb.OperationType_OPERATION_ADD,
+				Entries:    []*pb.ResourceEntry{{Kind: "Pod", Name: fmt.Sprintf("pod-%d", clientID), Namespace: "default"}},
 			})
 			if err != nil {
 				errors <- fmt.Errorf("client %d failed to send ADD update: %w", clientID, err)
@@ -328,7 +319,7 @@ func TestIntegration_MultipleClientsConnect(t *testing.T) {
 				errors <- fmt.Errorf("client %d failed to receive ACK: %w", clientID, err)
 				return
 			}
-			ack, ok := ackMsg.Message.(*SyncMessage_Ack)
+			ack, ok := ackMsg.Message.(*pb.SyncMessage_Ack)
 			if !ok {
 				errors <- fmt.Errorf("client %d expected SyncAck but got %T", clientID, ackMsg.Message)
 				return

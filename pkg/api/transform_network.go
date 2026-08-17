@@ -50,6 +50,7 @@ const (
 
 type NetworkTransformKubeConfig struct {
 	ConfigPath        string             `yaml:"configPath,omitempty" json:"configPath,omitempty" doc:"path to kubeconfig file (optional)"`
+	K8sCacheServer    *K8sCacheServer    `yaml:"k8sCacheServer,omitempty" json:"k8sCacheServer,omitempty" doc:"configuration for k8s cache mode"`
 	SecondaryNetworks []SecondaryNetwork `yaml:"secondaryNetworks,omitempty" json:"secondaryNetworks,omitempty" doc:"configuration for secondary networks"`
 	ManagedCNI        []string           `yaml:"managedCNI,omitempty" json:"managedCNI,omitempty" doc:"a list of CNI (network plugins) to manage, for detecting additional interfaces. Currently supported: ovn"`
 	TrackedKinds      []string           `yaml:"trackedKinds,omitempty" json:"trackedKinds,omitempty" doc:"list of Kubernetes resource kinds to track for ownership chain (e.g., Deployment, Gateway, VirtualMachine). If a resource's owner is in this list, FLP will continue tracking up the ownership chain."`
@@ -223,4 +224,14 @@ func buildStringMap(items []string) map[string]struct{} {
 		m[item] = struct{}{}
 	}
 	return m
+}
+
+type K8sCacheServer struct {
+	Address string `yaml:"address,omitempty" json:"address,omitempty" doc:"K8s cache sync server address"`
+	Port    int    `yaml:"port,omitempty" json:"port,omitempty" doc:"K8s cache sync server port (default: disabled)"`
+	// TLS configuration
+	TLSEnabled  bool   `yaml:"tlsEnabled,omitempty" json:"tlsEnabled,omitempty" doc:"Enable TLS for K8s cache sync server"`
+	TLSCertPath string `yaml:"tlsCertPath,omitempty" json:"tlsCertPath,omitempty" doc:"Path to TLS server certificate"`
+	TLSKeyPath  string `yaml:"tlsKeyPath,omitempty" json:"tlsKeyPath,omitempty" doc:"Path to TLS server private key"`
+	TLSCAPath   string `yaml:"tlsCAPath,omitempty" json:"tlsCAPath,omitempty" doc:"Path to TLS CA certificate for client verification"`
 }

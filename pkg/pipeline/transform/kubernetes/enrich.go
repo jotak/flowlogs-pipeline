@@ -7,14 +7,16 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource"
-	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource/informers"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource/k8scache"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
 	"github.com/sirupsen/logrus"
 )
 
-var ds *datasource.Datasource
-var infConfig informers.Config
-var k8scacheEnabled bool
+var (
+	mockedDS  datasource.Datasource
+	infConfig informers.Config
+)
 
 const (
 	truncateSuffix = "..."
@@ -23,40 +25,27 @@ const (
 // For testing
 func MockInformers() {
 	infConfig = informers.NewConfig(&api.NetworkTransformKubeConfig{})
-	ds = &datasource.Datasource{Informers: informers.NewInformersMock()}
+	mockedDS = informers.NewInformersMock()
 }
 
-// SetK8sCacheEnabled sets whether k8scache mode is enabled.
-// When enabled, local informers are disabled to save resources.
-// This must be called before InitInformerDatasource.
-func SetK8sCacheEnabled(enabled bool) {
-	k8scacheEnabled = enabled
-}
-
-func InitInformerDatasource(config *api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) error {
-	var err error
-	infConfig = informers.NewConfig(config)
-	if ds == nil {
-		if k8scacheEnabled {
-			// K8scache mode: create datasource without local informers to save resources
-			// The KubernetesStore will be set later by the k8scache server
-			logrus.Info("k8scache mode enabled: local informers disabled, using centralized cache")
-			ds = datasource.NewDatasourceK8sCache()
-		} else {
-			// Standard mode: create datasource with local informers
-			ds, err = datasource.NewInformerDatasource(config.ConfigPath, &infConfig, opMetrics)
-		}
+func InitDatasource(cfg *api.NetworkTransformKubeConfig, opMetrics *operational.Metrics) (datasource.Datasource, error) {
+	if mockedDS != nil {
+		logrus.Info("using mocked informers")
+		return mockedDS, nil
+	} else if cfg.K8sCacheServer != nil && cfg.K8sCacheServer.Port > 0 {
+		logrus.Info("k8scache mode enabled: local informers disabled, using centralized cache")
+		cache := k8scache.NewKubernetesCacheDatasource()
+		cache.StartGRPC(cfg.K8sCacheServer)
+		return cache, nil
 	}
-	return err
+	logrus.Info("k8scache mode disabled: using local informers")
+	inf := &informers.Informers{}
+	infConfig := informers.NewConfig(cfg)
+	err := inf.InitFromConfig(cfg.ConfigPath, &infConfig, opMetrics)
+	return inf, err
 }
 
-// GetDatasource returns the initialized datasource
-// Returns nil if datasource has not been initialized via InitInformerDatasource
-func GetDatasource() *datasource.Datasource {
-	return ds
-}
-
-func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
+func Enrich(ds datasource.Datasource, outputEntry config.GenericMap, rule *api.K8sRule) {
 	ip, ok := outputEntry.LookupString(rule.IPField)
 	if !ok {
 		return
@@ -106,7 +95,7 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 			outputEntry[rule.OutputKeys.HostName] = kubeInfo.HostName
 		}
 	}
-	fillInK8sZone(outputEntry, rule, kubeInfo)
+	fillInK8sZone(ds, outputEntry, rule, kubeInfo)
 
 	if rule.Assignee == "otel" {
 		// A few otel-specific names
@@ -127,7 +116,7 @@ func Enrich(outputEntry config.GenericMap, rule *api.K8sRule) {
 
 const nodeZoneLabelName = "topology.kubernetes.io/zone"
 
-func fillInK8sZone(outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *model.ResourceMetaData) {
+func fillInK8sZone(ds datasource.Datasource, outputEntry config.GenericMap, rule *api.K8sRule, kubeInfo *model.ResourceMetaData) {
 	if !rule.AddZone {
 		// Nothing to do
 		return

@@ -30,6 +30,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/location"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/netdb"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
@@ -41,10 +42,11 @@ var log = logrus.WithField("component", "transform.Network")
 
 type Network struct {
 	api.TransformNetwork
-	svcNames     *netdb.ServiceNames
-	snLabels     []subnetLabel
-	ipLabelCache *utils.TimedCache
-	m            sync.RWMutex
+	svcNames      *netdb.ServiceNames
+	snLabels      []subnetLabel
+	ipLabelCache  *utils.TimedCache
+	k8sDatasource datasource.Datasource
+	m             sync.RWMutex
 }
 
 type subnetLabel struct {
@@ -117,7 +119,7 @@ func (n *Network) Transform(inputEntry config.GenericMap) (config.GenericMap, bo
 			}
 			outputEntry[rule.AddService.Output] = serviceName
 		case api.NetworkAddKubernetes:
-			kubernetes.Enrich(outputEntry, rule.Kubernetes)
+			kubernetes.Enrich(n.k8sDatasource, outputEntry, rule.Kubernetes)
 		case api.NetworkAddKubernetesInfra:
 			if rule.KubernetesInfra == nil {
 				logrus.Error("transformation rule: Missing configuration ")
@@ -245,13 +247,13 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 	var needToInitKubeData = false
 	var needToInitNetworkServices = false
 
-	jsonNetworkTransform := api.TransformNetwork{}
+	cfg := api.TransformNetwork{}
 	if params.Transform != nil && params.Transform.Network != nil {
-		jsonNetworkTransform = *params.Transform.Network
+		cfg = *params.Transform.Network
 	}
-	jsonNetworkTransform.Preprocess()
+	cfg.Preprocess()
 
-	for _, rule := range jsonNetworkTransform.Rules {
+	for _, rule := range cfg.Rules {
 		switch rule.Type {
 		case api.NetworkAddLocation:
 			if rule.AddLocation == nil {
@@ -265,7 +267,7 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 		case api.NetworkAddService:
 			needToInitNetworkServices = true
 		case api.NetworkReinterpretDirection:
-			if err := validateReinterpretDirectionConfig(&jsonNetworkTransform.DirectionInfo); err != nil {
+			if err := validateReinterpretDirectionConfig(&cfg.DirectionInfo); err != nil {
 				return nil, err
 			}
 		case api.NetworkAddSubnetLabel, api.NetworkAddSubnet, api.NetworkDecodeTCPFlags:
@@ -280,34 +282,36 @@ func NewTransformNetwork(params config.StageParam, opMetrics *operational.Metric
 		}
 	}
 
+	var k8sDatasource datasource.Datasource
 	if needToInitKubeData {
-		err := kubernetes.InitInformerDatasource(&jsonNetworkTransform.KubeConfig, opMetrics)
-		if err != nil {
+		var err error
+		if k8sDatasource, err = kubernetes.InitDatasource(&cfg.KubeConfig, opMetrics); err != nil {
 			return nil, err
 		}
 	}
 
 	var servicesDB *netdb.ServiceNames
 	if needToInitNetworkServices {
-		db, err := initNetworkServices(&jsonNetworkTransform)
+		db, err := initNetworkServices(&cfg)
 		if err != nil {
 			return nil, err
 		}
 		servicesDB = db
 	}
 
-	subnetCats, err := parseSubnets(&jsonNetworkTransform)
+	subnetCats, err := parseSubnets(&cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Network{
 		TransformNetwork: api.TransformNetwork{
-			Rules:         jsonNetworkTransform.Rules,
-			DirectionInfo: jsonNetworkTransform.DirectionInfo,
+			Rules:         cfg.Rules,
+			DirectionInfo: cfg.DirectionInfo,
 		},
-		svcNames:     servicesDB,
-		snLabels:     subnetCats,
-		ipLabelCache: utils.NewQuietExpiringTimedCache(2 * time.Minute),
+		svcNames:      servicesDB,
+		snLabels:      subnetCats,
+		ipLabelCache:  utils.NewQuietExpiringTimedCache(2 * time.Minute),
+		k8sDatasource: k8sDatasource,
 	}, nil
 }

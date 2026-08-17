@@ -1,4 +1,4 @@
-package datasource
+package k8scache
 
 import (
 	"testing"

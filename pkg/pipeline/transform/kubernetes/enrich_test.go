@@ -6,7 +6,7 @@ import (
 	"github.com/netobserv/flowlogs-pipeline/pkg/api"
 	"github.com/netobserv/flowlogs-pipeline/pkg/config"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource"
-	inf "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/informers"
+	inf "github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/datasource/informers"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
 	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,14 +105,14 @@ var nt = api.TransformNetwork{
 	},
 }
 
-func setupStubs(ipInfo, customKeysInfo, nodes map[string]*model.ResourceMetaData) {
+func setupStubs(ipInfo, customKeysInfo, nodes map[string]*model.ResourceMetaData) datasource.Datasource {
 	cfg, informers := inf.SetupStubs(ipInfo, customKeysInfo, nodes)
-	ds = &datasource.Datasource{Informers: informers}
 	infConfig = cfg
+	return informers
 }
 
 func TestEnrich(t *testing.T) {
-	setupStubs(ipInfo, customKeysInfo, nodes)
+	ds := setupStubs(ipInfo, customKeysInfo, nodes)
 	nt.Preprocess()
 
 	// Pod to unknown
@@ -121,7 +121,7 @@ func TestEnrich(t *testing.T) {
 		"DstAddr": "42.42.42.42", // unknown
 	}
 	for _, r := range nt.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"DstAddr":            "42.42.42.42",
@@ -143,7 +143,7 @@ func TestEnrich(t *testing.T) {
 		"DstAddr": "10.0.0.2", // pod-2
 	}
 	for _, r := range nt.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"DstAddr":            "10.0.0.2",
@@ -174,7 +174,7 @@ func TestEnrich(t *testing.T) {
 		"DstAddr": "20.0.0.1", // service-1
 	}
 	for _, r := range nt.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"DstAddr":            "20.0.0.1",
@@ -221,7 +221,7 @@ var ntOtel = api.TransformNetwork{
 }
 
 func TestEnrich_Otel(t *testing.T) {
-	setupStubs(ipInfo, customKeysInfo, nodes)
+	ds := setupStubs(ipInfo, customKeysInfo, nodes)
 	ntOtel.Preprocess()
 
 	// Pod to unknown
@@ -230,7 +230,7 @@ func TestEnrich_Otel(t *testing.T) {
 		"destination.ip": "42.42.42.42", // unknown
 	}
 	for _, r := range ntOtel.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"destination.ip":            "42.42.42.42",
@@ -254,7 +254,7 @@ func TestEnrich_Otel(t *testing.T) {
 		"destination.ip": "10.0.0.2", // pod-2
 	}
 	for _, r := range ntOtel.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"destination.ip":                 "10.0.0.2",
@@ -289,7 +289,7 @@ func TestEnrich_Otel(t *testing.T) {
 		"destination.ip": "20.0.0.1", // service-1
 	}
 	for _, r := range ntOtel.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"destination.ip":                 "20.0.0.1",
@@ -317,7 +317,7 @@ func TestEnrich_Otel(t *testing.T) {
 }
 
 func TestEnrich_EmptyNamespace(t *testing.T) {
-	setupStubs(ipInfo, customKeysInfo, nodes)
+	ds := setupStubs(ipInfo, customKeysInfo, nodes)
 	nt.Preprocess()
 
 	// We need to check that, whether it returns NotFound or just an empty namespace,
@@ -328,7 +328,7 @@ func TestEnrich_EmptyNamespace(t *testing.T) {
 	}
 
 	for _, r := range nt.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 
 	assert.NotContains(t, entry, "SrcK8s_Namespace")
@@ -451,7 +451,7 @@ func TestEnrichLayer(t *testing.T) {
 }
 
 func TestEnrichUsingMac(t *testing.T) {
-	setupStubs(ipInfo, customKeysInfo, nodes)
+	ds := setupStubs(ipInfo, customKeysInfo, nodes)
 	nt.Preprocess()
 
 	// Pod to unknown using MAC
@@ -462,7 +462,7 @@ func TestEnrichUsingMac(t *testing.T) {
 		"DstMAC":  "GG:HH:II:JJ:KK:LL", // unknown
 	}
 	for _, r := range nt.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"SrcAddr":            "8.8.8.8",
@@ -487,7 +487,7 @@ func TestEnrichUsingMac(t *testing.T) {
 	}
 	for _, r := range nt.Rules {
 		r.Kubernetes.MACField = ""
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"DstMAC": "GG:HH:II:JJ:KK:LL",
@@ -544,7 +544,7 @@ func TestEnrichUsingUDN(t *testing.T) {
 			SecondaryNetNames: map[string]string{"ns-2/primary-udn~10.200.200.12": "ns-2/primary-udn"},
 		},
 	}
-	setupStubs(ipInfo, customIndexes, nodes)
+	ds := setupStubs(ipInfo, customIndexes, nodes)
 	ntUDN.Preprocess()
 
 	// MAC-indexed Pod 1 to UDN-indexed Pod 2
@@ -556,7 +556,7 @@ func TestEnrichUsingUDN(t *testing.T) {
 		"Udns":    []string{"", "default", "ns-2/primary-udn"},
 	}
 	for _, r := range ntUDN.Rules {
-		Enrich(entry, r.Kubernetes)
+		Enrich(ds, entry, r.Kubernetes)
 	}
 	assert.Equal(t, config.GenericMap{
 		"SrcAddr":            "8.8.8.8",
@@ -600,7 +600,7 @@ func TestEnrich_LabelsAndAnnotationsPrefixes(t *testing.T) {
 			Kind: "Pod",
 		},
 	}
-	setupStubs(testData, nil, nodes)
+	ds := setupStubs(testData, nil, nodes)
 
 	tests := []struct {
 		name              string
@@ -651,7 +651,7 @@ func TestEnrich_LabelsAndAnnotationsPrefixes(t *testing.T) {
 			rule.Preprocess()
 
 			entry := config.GenericMap{"SrcAddr": "10.0.0.10"}
-			Enrich(entry, rule.Rules[0].Kubernetes)
+			Enrich(ds, entry, rule.Rules[0].Kubernetes)
 
 			assert.Equal(t, "test-pod", entry["K8s_Name"])
 			for k, v := range tt.expectLabels {
@@ -690,7 +690,7 @@ func TestEnrich_LabelsAnnotationsFiltering(t *testing.T) {
 		},
 	}
 
-	setupStubs(testData, nil, nodes)
+	ds := setupStubs(testData, nil, nodes)
 
 	tests := []struct {
 		name                 string
@@ -812,7 +812,7 @@ func TestEnrich_LabelsAnnotationsFiltering(t *testing.T) {
 				"SrcAddr": "10.0.0.10",
 			}
 
-			Enrich(entry, rule.Rules[0].Kubernetes)
+			Enrich(ds, entry, rule.Rules[0].Kubernetes)
 
 			for _, label := range tt.expectedLabels {
 				assert.Contains(t, entry, label, "Expected label %s to be present", label)
@@ -958,7 +958,7 @@ func TestEnrich_LabelsValueTrimming(t *testing.T) {
 			Kind: "Pod",
 		},
 	}
-	setupStubs(testData, nil, nodes)
+	ds := setupStubs(testData, nil, nodes)
 
 	maxLen10 := 10
 	maxLen20 := 20
@@ -1013,7 +1013,7 @@ func TestEnrich_LabelsValueTrimming(t *testing.T) {
 			rule.Preprocess()
 
 			entry := config.GenericMap{"SrcAddr": "10.0.0.20"}
-			Enrich(entry, rule.Rules[0].Kubernetes)
+			Enrich(ds, entry, rule.Rules[0].Kubernetes)
 
 			for k, v := range tt.expectedLabels {
 				assert.Equal(t, v, entry[k])
@@ -1037,7 +1037,7 @@ func TestEnrich_AnnotationsValueTrimming(t *testing.T) {
 			Kind: "Pod",
 		},
 	}
-	setupStubs(testData, nil, nodes)
+	ds := setupStubs(testData, nil, nodes)
 
 	maxLen10 := 10
 	maxLen20 := 20
@@ -1092,7 +1092,7 @@ func TestEnrich_AnnotationsValueTrimming(t *testing.T) {
 			rule.Preprocess()
 
 			entry := config.GenericMap{"SrcAddr": "10.0.0.21"}
-			Enrich(entry, rule.Rules[0].Kubernetes)
+			Enrich(ds, entry, rule.Rules[0].Kubernetes)
 
 			for k, v := range tt.expectedAnnotations {
 				assert.Equal(t, v, entry[k])
@@ -1119,7 +1119,7 @@ func TestEnrich_LabelsAndAnnotationsTrimming_Combined(t *testing.T) {
 			Kind: "Pod",
 		},
 	}
-	setupStubs(testData, nil, nodes)
+	ds := setupStubs(testData, nil, nodes)
 
 	maxLen15 := 15
 	maxLen20 := 20
@@ -1181,7 +1181,7 @@ func TestEnrich_LabelsAndAnnotationsTrimming_Combined(t *testing.T) {
 			rule.Preprocess()
 
 			entry := config.GenericMap{"SrcAddr": "10.0.0.22"}
-			Enrich(entry, rule.Rules[0].Kubernetes)
+			Enrich(ds, entry, rule.Rules[0].Kubernetes)
 
 			for k, v := range tt.expectedLabels {
 				assert.Equal(t, v, entry[k])

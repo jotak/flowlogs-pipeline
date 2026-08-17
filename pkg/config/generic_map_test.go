@@ -13,7 +13,7 @@ func BenchmarkGenericMap_Copy(b *testing.B) {
 		m[fmt.Sprintf("key-%d", i)] = fmt.Sprintf("value-%d", i)
 	}
 
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = m.Copy()
 	}
 }

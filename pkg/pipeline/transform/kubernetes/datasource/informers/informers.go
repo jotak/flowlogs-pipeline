@@ -8,6 +8,7 @@ import (
 
 	"github.com/netobserv/flowlogs-pipeline/pkg/operational"
 	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/transform/kubernetes/model"
+	"github.com/netobserv/flowlogs-pipeline/pkg/pipeline/utils"
 	"github.com/netobserv/flowlogs-pipeline/pkg/utils/k8sutils"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -528,6 +529,11 @@ func (k *Informers) InitFromConfig(kubeconfig string, infConfig *Config, opMetri
 	if err != nil {
 		return err
 	}
+
+	go func() {
+		<-utils.ExitChannel()
+		k.Stop()
+	}()
 
 	return nil
 }

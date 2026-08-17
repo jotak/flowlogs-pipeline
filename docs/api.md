@@ -298,6 +298,13 @@ Following is the supported API format for network transformations:
                      output: entry output field
          kubeConfig: global configuration related to Kubernetes (optional)
              configPath: path to kubeconfig file (optional)
+             k8sCacheServer: configuration for k8s cache mode
+                 address: K8s cache sync server address
+                 port: K8s cache sync server port (default: disabled)
+                 tlsEnabled: Enable TLS for K8s cache sync server
+                 tlsCertPath: Path to TLS server certificate
+                 tlsKeyPath: Path to TLS server private key
+                 tlsCAPath: Path to TLS CA certificate for client verification
              secondaryNetworks: configuration for secondary networks
                      name: deprecated / unused
                      index: fields to use for indexing, must be any combination of 'mac', 'ip', 'interface', or 'udn'
